@@ -20,11 +20,13 @@ export const resolveRoutes = async ({
     (await (typeof externalRoutesFactory === 'function'
       ? externalRoutesFactory(api)
       : externalRoutesFactory)) ?? [];
-
-  const getChildPath = (route: Route | RouteCollection) => (
-    'initialPath' in route ? route.initialPath : route.path
-  );
-
+  const normalizePath = (route: Route | RouteCollection) =>
+    'initialPath' in route ? route.initialPath : route.path;
+  const ifRouteCollection = <T, F>(
+    route: Route | RouteCollection,
+    routeCollectionValue: T,
+    routeValue: F
+  ) => ('initialPath' in route ? routeCollectionValue : routeValue);
   const findRoute = (
     search: ExternalRoute,
     children = routes,
@@ -34,58 +36,53 @@ export const resolveRoutes = async ({
     for (const child of children) {
       // Replace Variables
       const searchPath = search.path?.replace(/:\w+(?=\/)?/, ':') ?? '';
-      const childPath = getChildPath(child)?.replace(/:\w+(?=\/)?/, ':') ?? '';
+      const childPath = normalizePath(child)?.replace(/:\w+(?=\/)?/, ':') ?? '';
       const prefixedPath = `${prefix}/${childPath}`;
-
       const tab = 'tab' in child ? child.tab : tabAffinity;
-
       if (
-        tab &&
-        (search.exact && prefixedPath === `/${searchPath}`) ||
+        (tab && search.exact && prefixedPath === `/${searchPath}`) ||
         (!search.exact && prefixedPath?.startsWith(`/${searchPath}` ?? ''))
       ) {
         return tab;
       }
-
       if ('children' in child) {
-        const found = findRoute(search, child.children, prefixedPath, tab);
+        const found = findRoute(
+          search,
+          child.children,
+          ifRouteCollection(child, '', prefixedPath),
+          tab
+        );
         if (found) {
           return tab;
         }
       }
     }
-
     return;
   };
-
   const withTabAffinity = (route: ExternalRoute): ExternalRoute => {
     const tab = findRoute(route);
-
     return { tabAffinity: tab?.id, ...route };
   };
-
   const tabbedExternalRoutes = externalRoutes.map(withTabAffinity);
-  const universalRoutes = tabbedExternalRoutes.filter(({ tabAffinity }) => !tabAffinity);
+  const universalRoutes = tabbedExternalRoutes.filter(
+    ({ tabAffinity }) => !tabAffinity
+  );
   const mergedRoutes = routes.map(route =>
     'tab' in route
       ? {
         ...route,
         children: [
           ...tabbedExternalRoutes
-              .filter(
-                ({ tabAffinity }) =>
-                  tabAffinity === route.tab?.id
-              )
-              .map(external => ({
-                ...external,
-                path: external.path?.replace(/\/$/, '').replace(/^\//, '')
-              })),
+            .filter(({ tabAffinity }) => tabAffinity === route.tab?.id)
+            .map(external => ({
+              ...external,
+              path: external.path?.replace(/\/$/, '').replace(/^\//, '')
+            })),
           ...route.children
         ]
       }
       : route
   );
-
   return [...universalRoutes, ...mergedRoutes];
 };
 

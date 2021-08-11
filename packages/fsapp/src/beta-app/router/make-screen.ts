@@ -7,6 +7,5 @@ export interface ScreenProps {
 
 export const makeScreen = (component: ComponentType<ScreenProps>, options?: ScreenOptions) => {
   const route = component as ScreenComponentType;
-  route.buttons = options?.buttons;
-  return route;
+  return { ...route, buttons: options?.buttons };
 };
